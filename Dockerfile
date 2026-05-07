@@ -1,24 +1,23 @@
-FROM kgrv/golang AS builder
-
-USER root
-
-RUN apk add ca-certificates
+FROM golang:1.26.2-alpine3.23 AS build
 
 WORKDIR /app
-COPY . .
 
+ENV CGO_ENABLED=0
+
+COPY go.mod go.sum ./
 RUN go mod download
 
-RUN go build -ldflags="-s -w -extldflags '-static'" -o pen-bot
+COPY . .
 
-FROM scratch
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go build -trimpath -ldflags="-s -w" -o /output/pen-bot ./cmd
+
+FROM gcr.io/distroless/static-debian13
 
 WORKDIR /app
-COPY --from=builder --chown=65534:65534 /app/pen-bot .
-COPY --from=builder /etc/ssl /etc/ssl
+USER nonroot
 
-USER 65534:65534
+COPY --from=build /output/pen-bot /app/pen-bot
 
-ENV DISCORD_TOKEN=""
-
-ENTRYPOINT ["./pen-bot"]
+CMD ["/app/pen-bot"]
